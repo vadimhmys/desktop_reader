@@ -4,7 +4,7 @@
 SoftwareSerial rfidLF(10, 9); // RX на пине 10
 
 // Светодиоды
-const int greenLed = 8;   // Зеленый - готовность
+const int redLed = 8;   // Красный - готовность
 const int yellowLed = 7;  // Желтый - 125 кГц карта
 const int builtinLed = LED_BUILTIN;
 const int buzzer = 6;
@@ -14,19 +14,19 @@ unsigned long lastReadTime = 0;
 const unsigned long debounceTime = 2000;
 
 void setup() {
-  pinMode(greenLed, OUTPUT);
+  pinMode(redLed, OUTPUT);
   pinMode(yellowLed, OUTPUT);
   pinMode(builtinLed, OUTPUT);
   pinMode(buzzer, OUTPUT);
   
   // Тест светодиодов
-  digitalWrite(greenLed, HIGH);
+  digitalWrite(redLed, HIGH);
   digitalWrite(yellowLed, HIGH);
   digitalWrite(builtinLed, HIGH);
   tone(buzzer, 1000, 300);
   delay(300);
   
-  digitalWrite(greenLed, LOW);
+  digitalWrite(redLed, LOW);
   digitalWrite(yellowLed, LOW);
   digitalWrite(builtinLed, LOW);
   delay(300);
@@ -36,13 +36,13 @@ void setup() {
   
   // Обратный отсчет
   for (int i = 0; i < 5; i++) {
-    digitalWrite(greenLed, HIGH);
+    digitalWrite(redLed, HIGH);
     delay(250);
-    digitalWrite(greenLed, LOW);
+    digitalWrite(redLed, LOW);
     delay(250);
   }
   
-  digitalWrite(greenLed, HIGH); // Готовность
+  digitalWrite(redLed, HIGH); // Готовность
   tone(buzzer, 1500, 300);
 }
 
@@ -62,7 +62,7 @@ void loop() {
         if (tagId != lastTagId || (millis() - lastReadTime) > debounceTime) {
           
           // Сигнал
-          digitalWrite(greenLed, LOW);
+          digitalWrite(redLed, LOW);
           digitalWrite(yellowLed, HIGH); // Зажигаем желтый - старая карта
           
           for (int i = 0; i < 2; i++) {
@@ -80,7 +80,7 @@ void loop() {
           delay(800);
           
           digitalWrite(yellowLed, LOW);
-          digitalWrite(greenLed, HIGH);
+          digitalWrite(redLed, HIGH);
           
           lastTagId = tagId;
           lastReadTime = millis();
