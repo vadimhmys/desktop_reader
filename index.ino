@@ -4,7 +4,7 @@
 SoftwareSerial rfidLF(10, 9); // RX на пине 10
 
 // Светодиоды
-const int redLed = 8;   // Красный - готовность
+const int redLed = 8;     // Красный - готовность
 const int yellowLed = 7;  // Желтый - 125 кГц карта
 const int builtinLed = LED_BUILTIN;
 const int buzzer = 6;
@@ -47,45 +47,80 @@ void setup() {
 }
 
 void loop() {
-  if (rfidLF.available() >= 14) {
-    if (rfidLF.read() == 2) {
-      byte tagData[13];
-      for (int i = 0; i < 13; i++) {
-        tagData[i] = rfidLF.read();
-      }
-      if (tagData[12] == 3) {
+  // Проверяем наличие данных
+  if (rfidLF.available() > 0) {
+    
+    // Ищем стартовый байт (0x02 = 2)
+    if (rfidLF.peek() == 2) {
+      
+      // Ждем накопления полного пакета (14 байт)
+      delay(20);
+      
+      if (rfidLF.available() >= 14) {
+        
+        // Читаем стартовый байт (2)
+        rfidLF.read();
+        
+        // Читаем 10 байт ID
         String tagId = "";
         for (int i = 0; i < 10; i++) {
-          tagId += (char)tagData[i];
+          if (rfidLF.available()) {
+            char c = rfidLF.read();
+            // Преобразуем в верхний регистр
+            if (c >= 'a' && c <= 'f') {
+              c = c - 32; // a->A, b->B и т.д.
+            }
+            tagId += c;
+          }
         }
         
-        if (tagId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+        // Пропускаем 2 байта контрольной суммы
+        rfidLF.read();
+        rfidLF.read();
+        
+        // Читаем стоп-байт (должен быть 3)
+        byte stopByte = rfidLF.read();
+        
+        // Проверяем корректность пакета
+        if (stopByte == 3 && tagId.length() == 10) {
           
-          // Сигнал
-          digitalWrite(redLed, LOW);
-          digitalWrite(yellowLed, HIGH); // Зажигаем желтый - старая карта
-          
-          for (int i = 0; i < 2; i++) {
-            digitalWrite(builtinLed, HIGH);
-            tone(buzzer, 2000, 100);
-            delay(120);
-            digitalWrite(builtinLed, LOW);
-            delay(120);
+          // Защита от повторного чтения
+          if (tagId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+            
+            // Сигнал
+            digitalWrite(redLed, LOW);
+            digitalWrite(yellowLed, HIGH);
+            
+            for (int i = 0; i < 2; i++) {
+              digitalWrite(builtinLed, HIGH);
+              tone(buzzer, 2000, 100);
+              delay(120);
+              digitalWrite(builtinLed, LOW);
+              delay(120);
+            }
+            
+            // Отправляем ТОЛЬКО ID (без префикса)
+            Keyboard.print(tagId);
+            Keyboard.write(KEY_RETURN);
+            
+            delay(800);
+            
+            digitalWrite(yellowLed, LOW);
+            digitalWrite(redLed, HIGH);
+            
+            lastTagId = tagId;
+            lastReadTime = millis();
           }
-          
-          Keyboard.print("[125kHz] ");
-          Keyboard.print(tagId);
-          Keyboard.write(KEY_RETURN);
-          
-          delay(800);
-          
-          digitalWrite(yellowLed, LOW);
-          digitalWrite(redLed, HIGH);
-          
-          lastTagId = tagId;
-          lastReadTime = millis();
+        } else {
+          // Если пакет поврежден, очищаем буфер
+          while (rfidLF.available() > 0) {
+            rfidLF.read();
+          }
         }
       }
+    } else {
+      // Если первый байт не стартовый - пропускаем мусор
+      rfidLF.read();
     }
   }
 }
