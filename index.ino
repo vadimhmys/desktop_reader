@@ -3,18 +3,17 @@
 #include <Keyboard.h>
 
 // === RDM6300 (125 кГц) - используем аппаратный Serial1 ===
-// TX модуля подключен к пину 0 (RX1) на Pro Micro
 #define RDM6300 Serial1
 
 // === RC522 (13.56 МГц) ===
-#define RST_PIN 9     // RST на пине 9
-#define SS_PIN 10     // SDA (SS) на пине 10
+#define RST_PIN 9
+#define SS_PIN 10
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 // Светодиоды
-const int redLed = 8;       // Красный - готовность
-const int yellowLed = 7;    // Желтый - 125 кГц карта
-const int blueLed = 4;      // Синий - 13.56 МГц карта
+const int redLed = 8;
+const int yellowLed = 7;
+const int blueLed = 4;
 const int builtinLed = LED_BUILTIN;
 const int buzzer = 6;
 
@@ -22,7 +21,24 @@ String lastTagId = "";
 unsigned long lastReadTime = 0;
 const unsigned long debounceTime = 2000;
 
-// Функция отправки символа с гарантией английской буквы
+// Функция преобразования HEX строки в DEC число
+unsigned long hexToDec(String hexString) {
+  unsigned long decimalValue = 0;
+  for (int i = 0; i < hexString.length(); i++) {
+    char c = hexString.charAt(i);
+    decimalValue = decimalValue * 16;
+    if (c >= '0' && c <= '9') {
+      decimalValue += (c - '0');
+    } else if (c >= 'A' && c <= 'F') {
+      decimalValue += (c - 'A' + 10);
+    } else if (c >= 'a' && c <= 'f') {
+      decimalValue += (c - 'a' + 10);
+    }
+  }
+  return decimalValue;
+}
+
+// Функция отправки символа
 void sendChar(char c) {
   if (c >= 'A' && c <= 'Z') {
     Keyboard.press(KEY_LEFT_SHIFT);
@@ -44,38 +60,32 @@ void sendString(String str) {
 // Функция обработки RDM6300 (125 кГц)
 bool processRDM6300() {
   if (RDM6300.available() > 0) {
-    // Ищем стартовый байт (0x02 = 2)
     if (RDM6300.peek() == 2) {
-      
-      // Ждем накопления полного пакета (14 байт)
       delay(20);
       
       if (RDM6300.available() >= 14) {
-        
-        // Читаем стартовый байт (2)
         RDM6300.read();
         
-        // Читаем 10 байт ID
-        String tagId = "";
+        String hexId = "";
         for (int i = 0; i < 10; i++) {
           if (RDM6300.available()) {
             char c = RDM6300.read();
             if (c >= 'a' && c <= 'f') {
               c = c - 32;
             }
-            tagId += c;
+            hexId += c;
           }
         }
         
-        // Пропускаем 2 байта контрольной суммы
         RDM6300.read();
         RDM6300.read();
-        
-        // Читаем стоп-байт (должен быть 3)
         byte stopByte = RDM6300.read();
         
-        if (stopByte == 3 && tagId.length() == 10) {
-          if (tagId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+        if (stopByte == 3 && hexId.length() == 10) {
+          if (hexId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+            
+            // Преобразуем HEX в DEC
+            unsigned long decId = hexToDec(hexId);
             
             // Сигнал для 125 кГц
             digitalWrite(redLed, LOW);
@@ -89,7 +99,8 @@ bool processRDM6300() {
               delay(120);
             }
             
-            sendString(tagId);
+            // Отправляем десятичный ID
+            sendString(String(decId));
             Keyboard.write(KEY_RETURN);
             
             delay(800);
@@ -97,7 +108,7 @@ bool processRDM6300() {
             digitalWrite(yellowLed, LOW);
             digitalWrite(redLed, HIGH);
             
-            lastTagId = tagId;
+            lastTagId = hexId;
             lastReadTime = millis();
             
             return true;
@@ -120,16 +131,19 @@ bool processRC522() {
   if (mfrc522.PICC_IsNewCardPresent()) {
     if (mfrc522.PICC_ReadCardSerial()) {
       
-      String tagId = "";
+      String hexId = "";
       for (byte i = 0; i < mfrc522.uid.size; i++) {
         if (mfrc522.uid.uidByte[i] < 0x10) {
-          tagId += "0";
+          hexId += "0";
         }
-        tagId += String(mfrc522.uid.uidByte[i], HEX);
+        hexId += String(mfrc522.uid.uidByte[i], HEX);
       }
-      tagId.toUpperCase();
+      hexId.toUpperCase();
       
-      if (tagId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+      if (hexId != lastTagId || (millis() - lastReadTime) > debounceTime) {
+        
+        // Преобразуем HEX в DEC
+        unsigned long decId = hexToDec(hexId);
         
         digitalWrite(redLed, LOW);
         digitalWrite(blueLed, HIGH);
@@ -139,7 +153,8 @@ bool processRC522() {
         digitalWrite(builtinLed, LOW);
         delay(400);
         
-        sendString(tagId);
+        // Отправляем десятичный ID
+        sendString(String(decId));
         Keyboard.write(KEY_RETURN);
         
         delay(800);
@@ -147,7 +162,7 @@ bool processRC522() {
         digitalWrite(blueLed, LOW);
         digitalWrite(redLed, HIGH);
         
-        lastTagId = tagId;
+        lastTagId = hexId;
         lastReadTime = millis();
         
         return true;
@@ -181,7 +196,7 @@ void setup() {
   delay(300);
   
   // Инициализация модулей
-  RDM6300.begin(9600);     // Аппаратный Serial1 для RDM6300
+  RDM6300.begin(9600);
   SPI.begin();
   mfrc522.PCD_Init();
   Keyboard.begin();
@@ -199,7 +214,6 @@ void setup() {
 }
 
 void loop() {
-  // Приоритет для RDM6300
   bool cardRead = processRDM6300();
   
   if (!cardRead) {
